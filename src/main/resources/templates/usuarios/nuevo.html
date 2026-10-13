@@ -1,7 +1,6 @@
 <!DOCTYPE html>
-<!-- Alta de usuario. Nace sin contraseña: la persona la fija con "Olvidé mi
-     contraseña", igual que un usuario migrado sin hash. El rol tampoco se toca acá: nace
-     USUARIO y se sube aparte, desde la ficha, un acto deliberado. -->
+<!-- Alta de usuario. La contraseña se fija aquí mismo, así la cuenta nace usable. El
+     rol no se toca acá: nace USUARIO y se sube aparte, desde la ficha, un acto deliberado. -->
 <html lang="es" xmlns:th="http://www.thymeleaf.org"
       th:replace="~{fragments/app-layout :: pagina('Nuevo usuario', ~{::seccion})}">
 <body>
@@ -34,6 +33,24 @@
             <div class="sm:col-span-2">
                 <label class="etiqueta-campo" for="fechaNacimiento">Fecha de nacimiento</label>
                 <input id="fechaNacimiento" name="fechaNacimiento" type="date" class="input">
+            </div>
+
+            <div class="sm:col-span-2 mt-2 border-t border-neutral-200 pt-4">
+                <span class="card-kicker">Contraseña de acceso</span>
+                <p class="m-0 mt-1 text-[12px] text-neutral-600"
+                   th:text="|Mínimo ${longitudMinimaPassword} caracteres, con letras y números, sin el nombre ni el correo. Dásela a la persona en privado.|">
+                    Mínimo 10 caracteres.
+                </p>
+            </div>
+            <div>
+                <label class="etiqueta-campo" for="password">Contraseña</label>
+                <input id="password" name="password" type="password" required autocomplete="new-password"
+                       th:attr="minlength=${longitudMinimaPassword}" class="input">
+            </div>
+            <div>
+                <label class="etiqueta-campo" for="confirmPassword">Repetir contraseña</label>
+                <input id="confirmPassword" name="confirmPassword" type="password" required
+                       autocomplete="new-password" class="input">
             </div>
 
             <div class="sm:col-span-2 mt-2 flex gap-3">

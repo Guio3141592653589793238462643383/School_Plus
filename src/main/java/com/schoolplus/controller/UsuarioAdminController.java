@@ -7,6 +7,7 @@ import com.schoolplus.model.Usuario;
 import com.schoolplus.model.UsuarioFoto;
 import com.schoolplus.repository.RolRepository;
 import com.schoolplus.repository.UsuarioRepository;
+import com.schoolplus.services.auth.ValidationService;
 import com.schoolplus.services.cuenta.CuentaService;
 import com.schoolplus.services.usuarios.DatosUsuario;
 import com.schoolplus.services.usuarios.DatosUsuarioInvalidosException;
@@ -36,8 +37,7 @@ import java.util.stream.Collectors;
  * roles y foto de perfil, todo desde una sola ficha.
  *
  * <p>No hay borrado físico ni aquí ni en {@link UsuarioAdminService}: "eliminar" es
- * desactivar. La contraseña tampoco se toca desde este panel — nace en {@code null} y la
- * persona la fija por "recuperar contraseña".</p>
+ * desactivar. La contraseña se fija al crear y se puede cambiar al editar.</p>
  */
 @Controller
 @RequestMapping("/rectoria/usuarios")
@@ -47,15 +47,18 @@ public class UsuarioAdminController {
     private final UsuarioRepository usuarioRepository;
     private final RolRepository rolRepository;
     private final CuentaService cuentaService;
+    private final ValidationService validationService;
 
     public UsuarioAdminController(UsuarioAdminService usuarioAdminService,
                                   UsuarioRepository usuarioRepository,
                                   RolRepository rolRepository,
-                                  CuentaService cuentaService) {
+                                  CuentaService cuentaService,
+                                  ValidationService validationService) {
         this.usuarioAdminService = usuarioAdminService;
         this.usuarioRepository = usuarioRepository;
         this.rolRepository = rolRepository;
         this.cuentaService = cuentaService;
+        this.validationService = validationService;
     }
 
     // ── Listado y alta ───────────────────────────────────────────────────────
@@ -71,6 +74,7 @@ public class UsuarioAdminController {
     @GetMapping("/nuevo")
     @PreAuthorize("@capacidades.puede('" + Capacidades.USUARIO_ADMINISTRAR + "')")
     public String nuevoForm(Model modelo) {
+        modelo.addAttribute("longitudMinimaPassword", validationService.getLongitudMinima());
         modelo.addAttribute("seccion", "usuarios");
         return "usuarios/nuevo";
     }
@@ -80,6 +84,8 @@ public class UsuarioAdminController {
     public String crear(@RequestParam String nombre, @RequestParam String email,
                         @RequestParam String cedula, @RequestParam String telefono,
                         @RequestParam(required = false) String fechaNacimiento,
+                        @RequestParam(required = false) String password,
+                        @RequestParam(required = false) String confirmPassword,
                         RedirectAttributes redirect) {
         LocalDate nacimiento;
         try {
@@ -90,8 +96,8 @@ public class UsuarioAdminController {
         }
         try {
             Usuario creado = usuarioAdminService.crear(
-                    new DatosUsuario(nombre, email, cedula, telefono, nacimiento));
-            redirect.addFlashAttribute("aviso", "Usuario creado. La persona fija su contraseña con \"Olvidé mi contraseña\".");
+                    new DatosUsuario(nombre, email, cedula, telefono, nacimiento), password, confirmPassword);
+            redirect.addFlashAttribute("aviso", "Usuario creado. Ya puede entrar con la contraseña que le fijaste.");
             return "redirect:/rectoria/usuarios/" + creado.getId();
         } catch (DatosUsuarioInvalidosException e) {
             redirect.addFlashAttribute("error", String.join(" ", e.getErrores()));
@@ -110,6 +116,7 @@ public class UsuarioAdminController {
         modelo.addAttribute("usuario", usuario);
         modelo.addAttribute("tieneFoto", cuentaService.tieneFoto(id));
         modelo.addAttribute("roles", rolRepository.findAll());
+        modelo.addAttribute("longitudMinimaPassword", validationService.getLongitudMinima());
         // Por codigo, no por igualdad de entidad: usuario y roles vienen de consultas
         // (y por lo tanto de contextos de persistencia) distintos, así que dos objetos
         // Rol que representan la misma fila no son == ni .equals() entre sí.
@@ -125,6 +132,8 @@ public class UsuarioAdminController {
                              @RequestParam String nombre, @RequestParam String email,
                              @RequestParam String cedula, @RequestParam String telefono,
                              @RequestParam(required = false) String fechaNacimiento,
+                             @RequestParam(required = false) String password,
+                             @RequestParam(required = false) String confirmPassword,
                              RedirectAttributes redirect) {
         LocalDate nacimiento;
         try {
@@ -134,8 +143,11 @@ public class UsuarioAdminController {
             return "redirect:/rectoria/usuarios/" + id;
         }
         try {
-            usuarioAdminService.actualizar(id, new DatosUsuario(nombre, email, cedula, telefono, nacimiento));
-            redirect.addFlashAttribute("aviso", "Datos actualizados.");
+            usuarioAdminService.actualizar(id, new DatosUsuario(nombre, email, cedula, telefono, nacimiento),
+                    password, confirmPassword);
+            redirect.addFlashAttribute("aviso", (password == null || password.isEmpty())
+                    ? "Datos actualizados."
+                    : "Datos y contraseña actualizados. Si tenía una sesión abierta, se cerró.");
         } catch (DatosUsuarioInvalidosException e) {
             redirect.addFlashAttribute("error", String.join(" ", e.getErrores()));
         } catch (IllegalArgumentException e) {

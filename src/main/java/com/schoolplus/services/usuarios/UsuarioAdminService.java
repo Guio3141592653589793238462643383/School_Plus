@@ -6,7 +6,9 @@ import com.schoolplus.model.Usuario;
 import com.schoolplus.repository.RolRepository;
 import com.schoolplus.repository.UsuarioRepository;
 import com.schoolplus.services.auth.ValidationService;
+import com.schoolplus.services.password.PasswordResetService;
 import com.schoolplus.util.UuidV7;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,10 +26,10 @@ import java.util.stream.Collectors;
  * {@link EstadoUsuario#INACTIVO}. La persona conserva su historial y no puede volver a
  * entrar.</p>
  *
- * <p>La contraseña no se fija aquí: nace en {@code null} —el mismo estado que ya usa la
- * migración de usuarios heredados (V1)— y la persona la establece por el flujo de
- * "recuperar contraseña" que {@code PasswordController} ya expone. No hace falta un
- * segundo mecanismo para lo mismo.</p>
+ * <p>Contraseña: el admin la fija al crear la cuenta, así nace usable aunque la persona
+ * no revise el correo (un estudiante, un docente que nunca abrió el institucional). Al
+ * editar es opcional: vacía deja la actual; si viene, pasa por la misma política que
+ * cualquier otra y se cierran las sesiones abiertas de esa cuenta.</p>
  */
 @Service
 public class UsuarioAdminService {
@@ -35,18 +37,29 @@ public class UsuarioAdminService {
     private final UsuarioRepository usuarioRepository;
     private final RolRepository rolRepository;
     private final ValidationService validationService;
+    private final PasswordEncoder passwordEncoder;
+    private final PasswordResetService passwordService;
 
     public UsuarioAdminService(UsuarioRepository usuarioRepository,
                                RolRepository rolRepository,
-                               ValidationService validationService) {
+                               ValidationService validationService,
+                               PasswordEncoder passwordEncoder,
+                               PasswordResetService passwordService) {
         this.usuarioRepository = usuarioRepository;
         this.rolRepository = rolRepository;
         this.validationService = validationService;
+        this.passwordEncoder = passwordEncoder;
+        this.passwordService = passwordService;
     }
 
+    /**
+     * Alta con contraseña obligatoria. Sus errores salen junto con los del resto del
+     * formulario: o se crea la cuenta completa o no se crea.
+     */
     @Transactional
-    public Usuario crear(DatosUsuario datos) {
+    public Usuario crear(DatosUsuario datos, String password, String confirmacion) {
         List<String> errores = validarBasicos(datos);
+        errores.addAll(validationService.validarPassword(password, confirmacion, datos.nombre(), datos.email()));
         if (usuarioRepository.existsByEmail(datos.email())) {
             errores.add("Ese correo ya tiene cuenta.");
         }
@@ -61,6 +74,7 @@ public class UsuarioAdminService {
         usuario.setId(UuidV7.nuevoId());
         usuario.setEstado(EstadoUsuario.ACTIVO);
         aplicarDatos(usuario, datos);
+        usuario.setPasswordHash(passwordEncoder.encode(password));
 
         // Rol base: igual que el auto-registro, nadie nace con permisos elevados por
         // defecto. Se suben aparte con asignarRoles, un acto deliberado.
@@ -71,8 +85,9 @@ public class UsuarioAdminService {
         return usuarioRepository.save(usuario);
     }
 
+    /** Edición. {@code password} vacía o nula deja la contraseña actual intacta. */
     @Transactional
-    public Usuario actualizar(String usuarioId, DatosUsuario datos) {
+    public Usuario actualizar(String usuarioId, DatosUsuario datos, String password, String confirmacion) {
         Usuario usuario = usuarioRepository.findById(usuarioId)
                 .orElseThrow(() -> new IllegalArgumentException("El usuario " + usuarioId + " no existe."));
 
@@ -83,12 +98,25 @@ public class UsuarioAdminService {
         usuarioRepository.findByCedula(datos.cedula())
                 .filter(otro -> !otro.getId().equals(usuarioId))
                 .ifPresent(otro -> errores.add("Esa cédula ya está registrada."));
+        boolean cambiaPassword = password != null && !password.isEmpty();
+        if (cambiaPassword) {
+            errores.addAll(validationService.validarPassword(password, confirmacion, datos.nombre(), datos.email()));
+        }
         if (!errores.isEmpty()) {
             throw new DatosUsuarioInvalidosException(errores);
         }
 
+        // Las sesiones abiertas están a nombre del correo de antes, por si también cambia.
+        String emailAnterior = usuario.getEmail();
         aplicarDatos(usuario, datos);
-        return usuarioRepository.save(usuario);
+        if (cambiaPassword) {
+            usuario.setPasswordHash(passwordEncoder.encode(password));
+        }
+        Usuario guardado = usuarioRepository.save(usuario);
+        if (cambiaPassword) {
+            passwordService.cerrarSesionesDe(emailAnterior);
+        }
+        return guardado;
     }
 
     @Transactional

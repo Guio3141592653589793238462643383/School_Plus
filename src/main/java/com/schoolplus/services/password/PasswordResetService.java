@@ -162,9 +162,10 @@ public class PasswordResetService {
 
     /**
      * Echa de la aplicación todas las sesiones abiertas con esa cuenta y borra sus
-     * recordatorios de "mantener sesión activa".
+     * recordatorios de "mantener sesión activa". También la usa el panel de usuarios
+     * cuando el admin le cambia la contraseña a alguien.
      */
-    private void cerrarSesionesDe(String email) {
+    public void cerrarSesionesDe(String email) {
         try {
             sesiones.findByPrincipalName(email).keySet().forEach(sesiones::deleteById);
             recordatorios.removeUserTokens(email);

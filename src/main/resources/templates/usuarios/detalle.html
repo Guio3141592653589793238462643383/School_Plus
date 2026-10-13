@@ -85,6 +85,24 @@
                     <input id="fechaNacimiento" name="fechaNacimiento" type="date" class="input"
                            th:value="${usuario.fechaNacimiento}">
                 </div>
+
+                <div class="sm:col-span-2 mt-2 border-t border-neutral-200 pt-4">
+                    <span class="card-kicker">Contraseña</span>
+                    <p class="m-0 mt-1 text-[12px] text-neutral-600"
+                       th:text="|Déjala en blanco para no cambiarla. Si pones una nueva: mínimo ${longitudMinimaPassword} caracteres, con letras y números. Si la persona tiene una sesión abierta, se cierra.|">
+                        Déjala en blanco para no cambiarla.
+                    </p>
+                </div>
+                <div>
+                    <label class="etiqueta-campo" for="password">Nueva contraseña</label>
+                    <input id="password" name="password" type="password" autocomplete="new-password"
+                           th:attr="minlength=${longitudMinimaPassword}" class="input">
+                </div>
+                <div>
+                    <label class="etiqueta-campo" for="confirmPassword">Repetir contraseña</label>
+                    <input id="confirmPassword" name="confirmPassword" type="password"
+                           autocomplete="new-password" class="input">
+                </div>
                 <div class="sm:col-span-2">
                     <button type="submit" class="btn btn-primary w-full py-3 text-[13px] uppercase tracking-[0.06em]">
                         Guardar datos
